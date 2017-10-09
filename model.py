@@ -42,7 +42,7 @@ def get_model():
     d_dim = 512
     vocab_size = 10000
     lstm_units = 512
-    seq_len = 42
+    seq_len = 40
     dropout = True
     
     cnn, img_input = image_model()
@@ -150,7 +150,9 @@ def get_model():
 
     model.compile(optimizer=RMSprop(),
                   loss='categorical_crossentropy',
-                  metrics=['accuracy'])
+                  metrics=['accuracy'],
+                  sample_weight_mode='temporal')
+
     return model
 
 def test_model():
