@@ -15,13 +15,21 @@ from keras import metrics
 from configuration import Config
 from lstm_vs import LSTMCell_VS, RNN_VS
 
-def image_model():
+def image_model(fine_tune):
     
     input = Input((299,299,3))
     base_model = InceptionV3(input_tensor=input, weights='imagenet', include_top=False)
 
-    for layer in base_model.layers:
-        layer.trainable = False
+    if fine_tune:
+        print("Fine tune ON")
+        for layer in base_model.layers[:249]:
+            layer.trainable = False
+        for layer in base_model.layers[249:]:
+            layer.trainable = True
+    else:
+        print("Fine tune OFF")
+        for layer in base_model.layers:
+            layer.trainable = False
 
     return base_model, input
 
@@ -38,7 +46,7 @@ def get_model(config):
     seq_len = config.seq_len
     dropout = config.dropout
     
-    cnn, img_input = image_model()
+    cnn, img_input = image_model(config.fine_tune)
     V = cnn.output
 
     # k regions, image length

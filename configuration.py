@@ -8,6 +8,8 @@ class Config(object):
         self.seq_len = longest + 1
 
         self.cap_len = longest + 2
+
+        self.fine_tune = False
         
         self.batch_size = 32
 
