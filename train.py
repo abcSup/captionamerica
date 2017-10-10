@@ -37,7 +37,6 @@ model.fit_generator(data.generator(), config.num_batch,
                     callbacks=[tensorboard, checkpoint],
                     workers=1,
                     use_multiprocessing=False)
-model.save_weights('./checkpoint/_weight.hdf5')
 
 # Fine-tuning
 config.fine_tune = True
