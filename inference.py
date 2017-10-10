@@ -6,11 +6,12 @@ import numpy as np
 from keras.preprocessing import sequence
 from keras.applications.inception_v3 import preprocess_input
 
+from configuration import Config
 from model import get_model
 from data_generator import DataGenerator
 
-def beamsearch(img_name,
-               k=3, maxsample=40, use_unk=False, oov=3, empty=0, eos=2):
+def beamsearch(img_name, maxsample, k,
+               use_unk=False, oov=3, empty=0, eos=2):
     """return k samples (beams) and their NLL scores, each sample is a sequence of labels,
     all samples starts with an `empty` label and end with `eos` or truncated to length of `maxsample`.
     You need to supply `predict` which returns the label probability of each sample.
@@ -68,14 +69,17 @@ if __name__ == "__main__":
                         help="the weight file path")
 
     args = parser.parse_args()
+    config = Config()
+    config.batch_size = 1
+    config.num_batch = 1
 
-    model = get_model()
+    model = get_model(config)
     model.load_weights(args.weight)
-    data = DataGenerator(1,1)
+    data = DataGenerator(config)
 
     while True:
         img_name = data.random_imgname()
-        samples, scores = beamsearch(img_name)
+        samples, scores = beamsearch(img_name, config.seq_len, config.beam_size)
 
         print("Prediction, scores")
         caps = data.seqs_to_caps(samples)

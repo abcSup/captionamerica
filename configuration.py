@@ -18,3 +18,5 @@ class Config(object):
         self.num_lstm = 512
 
         self.dropout = False
+
+        self.beam_size = 5
