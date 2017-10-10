@@ -12,6 +12,7 @@ from keras.optimizers import RMSprop
 from keras import backend as K
 from keras import metrics
 
+from configuration import Config
 from lstm_vs import LSTMCell_VS, RNN_VS
 
 def image_model():
@@ -19,31 +20,23 @@ def image_model():
     input = Input((299,299,3))
     base_model = InceptionV3(input_tensor=input, weights='imagenet', include_top=False)
 
-    #x = base_model.output
-    #x = GlobalAveragePooling2D()(x)
-    #x = Dense(embedding_size)(x)
-    #x = BatchNormalization()(x)
-    #x = Activation('relu')(x)
-    #x = Dropout(0.2)(x)
-    #x = Reshape((1, embedding_size))(x)
-
     for layer in base_model.layers:
         layer.trainable = False
 
     return base_model, input
 
-def get_model():
+def get_model(config):
     # first model
     # embedding = 512, seq = 36, vocab = 8045
     # dropout 0.8, lstm dropout 0.7
     #  lstm 1024
 
-    emb_size = 512
-    d_dim = 512
-    vocab_size = 10000
-    lstm_units = 512
-    seq_len = 40
-    dropout = True
+    emb_size = config.emb_size
+    d_dim = config.emb_size
+    vocab_size = config.vocab_size
+    lstm_units = config.num_lstm
+    seq_len = config.seq_len
+    dropout = config.dropout
     
     cnn, img_input = image_model()
     V = cnn.output
@@ -64,11 +57,11 @@ def get_model():
         Vg = Dropout(0.5)(Vg)
 
     # Vi.shape (None, k, 512)
-    Vi = Conv1D(d_dim, 1, padding='same', activation='relu')(V)
+    Vi = Conv1D(d_dim, 1, padding='same', activation='relu', name='Vi')(V)
     if dropout:
         Vi = Dropout(0.5)(Vi)
 
-    Vi_emb = Conv1D(emb_size, 1, padding='same', activation='relu')(Vi)
+    # Vi_emb = Conv1D(emb_size, 1, padding='same', activation='relu')(Vi)
 
     x = RepeatVector(seq_len)(Vg)
 
@@ -93,9 +86,11 @@ def get_model():
     Vi = Permute((2,1,3), name='Vi.Permute')(Vi)
     # (None, timestep, k, k)
     Wv_Vi = TimeDistributed(Dense(k_size), name='Wv_Vi')(Vi)
+    Wv_Vi = TimeDistributed(BatchNormalization())(Wv_Vi)
     
     # (None, timestep, k)
     Wg_h = TimeDistributed(Dense(k_size), name='Wg_h')(h)
+    Wg_h = TimeDistributed(BatchNormalization())(Wg_h)
     # (None, timestep, k, k)
     Wg_h_1 = TimeDistributed(RepeatVector(k_size), name='Wg_h_1')(Wg_h)
 
@@ -103,24 +98,30 @@ def get_model():
     z = TimeDistributed(Activation('tanh'), name='z_tanh')(z)
 
     # wTh, wth * tanh(z_Vi + z_h) 
-    #z = TimeDistributed(Conv1D(1,1,padding='same'), name='wTh')(z)
-    z = TimeDistributed(Dense(1), name='wTh')(z)
+    z = TimeDistributed(Conv1D(1,1,padding='same'), name='wTh')(z)
+    #z = TimeDistributed(Dense(1), name='wTh')(z)
+    z = TimeDistributed(BatchNormalization())(z)
     # (None, timestep, k_size)
     z = Reshape((seq_len, k_size), name='wTh.Reshape')(z)
 
     # (None, timestep, k)
-    Ws_s = TimeDistributed(Dense(k_size))(s)
+    Ws_s = TimeDistributed(Dense(k_size), name='Ws_s')(s)
+    Ws_s = TimeDistributed(BatchNormalization())(Ws_s)
     B = Add(name='Ws_s_add_Wg_h')([Ws_s, Wg_h])
     B = Dense(1)(B)
+    B = BatchNormalization()(B)
 
+    # (None, timestep, k_size+1)
     a_hat = Concatenate(axis=2, name='z_B')([z, B])
     a_hat = TimeDistributed(Activation('softmax'), name='a_hat')(a_hat)
 
     # (None, timestep, 1)
-    B = Lambda(lambda x: x[:, :, -1], name='B')(a_hat)
     att = Lambda(lambda x: x[:, :, :k_size], name='att')(a_hat)
+    B = Lambda(lambda x: x[:, :, -1], name='B')(a_hat)
 
+    # (None, timestep, d_dim, k_size)
     att = TimeDistributed(RepeatVector(d_dim), name='att.Repeat')(att)
+    # (None, timestep, k_ksize, d_dim)
     att = Permute((1,3,2), name='att.Permute')(att)
 
     # context vector
@@ -141,9 +142,8 @@ def get_model():
 
     c_hat_h = Add(name='c_hat_h')([c_hat, h])
     logits = TimeDistributed(Dense(vocab_size), name='logits')(c_hat_h)
+    logits = TimeDistributed(BatchNormalization())(logits)
 
-    #logits = Dense(vocab_size)(lstm)
-    #logits = BatchNormalization()(logits)
     softmax = Activation('softmax', name='softmax')(logits)
 
     model = Model(inputs=[img_input, prev_words], outputs=softmax)
@@ -154,6 +154,7 @@ def get_model():
                   sample_weight_mode='temporal')
 
     return model
+    # remove dropout added batchnormalization
 
 def test_model():
     input = Input((32,512))
@@ -175,5 +176,6 @@ def test_model():
     return model
 
 if __name__ == "__main__":
-    model = get_model()
+    config = Config()
+    model = get_model(config)
     model.summary()
