@@ -2,9 +2,10 @@ import collections
 import os
 from os.path import join, exists
 import json
-import random
-import pickle
 import multiprocessing as mp
+import pickle
+import argparse
+import random
 
 import h5py
 import jieba
@@ -15,10 +16,8 @@ from keras.preprocessing.sequence import pad_sequences
 from configuration import Config
 
 train_dir = '/mnt/Users/abcSup/Downloads/ai_challenger_caption_train_20170902/caption_train_images_20170902/'
-annotation_file = '/mnt/Users/abcSup/Downloads/ai_challenger_caption_train_20170902/caption_train_annotations_20170902.json'
-data_dir = './data/'
-wtoi_fname = join(data_dir, 'wtoi.p')
-itow_fname = join(data_dir, 'itow.p')
+train_annotation = '/mnt/Users/abcSup/Downloads/ai_challenger_caption_train_20170902/caption_train_annotations_20170902.json'
+val_annotation = '/mnt/Users/abcSup/Downloads/ai_challenger_caption_validation_20170910/caption_validation_annotations_20170910.json'
 
 img_dir = train_dir
 output_h5 = 'train_data.h5'
@@ -34,7 +33,7 @@ def tokenize(img):
 
     return img_id, caps, words, length
 
-def read_dataset():
+def read_dataset(annotation_file):
     pool = mp.Pool(mp.cpu_count())
 
     words, length = [], []
@@ -97,7 +96,7 @@ def compute_caption(data):
 
     return caps, num_captions
     
-def prepare_datasets(img_to_seqs, cap_len):
+def prepare_datasets(img_to_seqs, cap_len, data_dir):
     pool = mp.Pool(mp.cpu_count())
 
     img_names = [x for x in img_to_seqs.keys()]
@@ -130,11 +129,22 @@ def prepare_datasets(img_to_seqs, cap_len):
     pool.close()
     pool.join()
 
-def main():
+def main(dataset):
+    if dataset == "train":
+        data_dir = './data/train'
+        annotation_file = train_annotation
+    elif dataset == "val":
+        data_dir = './data/val'
+        annotation_file = val_annotation
+    else:
+        raise Exception('Wrong dataset!')
+    wtoi_fname = join(data_dir, 'wtoi.p')
+    itow_fname = join(data_dir, 'itow.p')
+
     config = Config()
 
     print("Read dataset")
-    words, img_to_caps = read_dataset()
+    words, img_to_caps = read_dataset(annotation_file)
 
     print("Create and pickle vocab")
     wtoi, itow = build_vocab(words, config.vocab_size)
@@ -144,8 +154,13 @@ def main():
     img_to_seqs = encode_captions(img_to_caps, wtoi)
     del words, img_to_caps
     
-    prepare_datasets(img_to_seqs, config.cap_len)
+    prepare_datasets(img_to_seqs, config.cap_len, data_dir)
     print("Done")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description='Prepare dataset')
+    parser.add_argument("dataset",
+                        help="The dataset to prepare (train|val)")
+    args = parser.parse_args()
+
+    main(args.dataset)

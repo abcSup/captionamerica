@@ -1,6 +1,7 @@
 from os.path import join, exists
 import pickle
 import random
+import argparse
 
 import numpy as np
 import h5py
@@ -14,11 +15,21 @@ from keras.utils.data_utils import Sequence
 
 from configuration import Config
 
+train_imgdir = '/mnt/Users/abcSup/Downloads/ai_challenger_caption_train_20170902/caption_train_images_20170902/'
+val_imgdir = '/mnt/Users/abcSup/Downloads/ai_challenger_caption_validation_20170910/caption_validation_images_20170910/'
+
 class DataGenerator(object):
 
-    def __init__(self, config):
-        self.data_dir = './data/'
-        self.img_dir = '/mnt/Users/abcSup/Downloads/ai_challenger_caption_train_20170902/caption_train_images_20170902/'
+    def __init__(self, config, dataset):
+        if dataset == "train":
+            self.data_dir = './data/train'
+            self.img_dir = train_imgdir
+        elif dataset == "val":
+            self.data_dir = './data/val'
+            self.img_dir = val_imgdir
+        else:
+            raise Exception('Wrong dataset!')
+
         self.wtoi = pickle.load(open(join(self.data_dir, 'wtoi.p'), 'rb'))
         self.itow = pickle.load(open(join(self.data_dir, 'itow.p'), 'rb'))
         self.imglist_file = join(self.data_dir, 'img_names.p')
@@ -34,16 +45,10 @@ class DataGenerator(object):
         self.batch_size = config.batch_size
         self.num_batch = config.num_batch
 
-    def seqs_to_caps(self, seqs):
+    def seq_to_cap(self, seq):
         remove = [0, 1, 2]
-        caps = []
-        for s in seqs:
-            cap = [self.itow[w] for w in s if w not in remove]
-            caps.append(''.join(cap))
-        return caps
-
-    def random_imgname(self):
-        return random.choice(self.img_names)
+        cap = [self.itow[w] for w in seq if w not in remove]
+        return ''.join(cap)
     
     def return_img(self, img_name):
         path = join(self.img_dir, img_name)
@@ -76,8 +81,8 @@ class DataGenerator(object):
         return input_seqs, target_seqs, sample_weights
 
     def _preprocess_imgs(self, img_names):
-        """Preprocess image for InceptionV3"""
-        images = np.zeros((self.batch_size,299,299,3),dtype=np.float32)
+        """Preprocess images for InceptionV3"""
+        images = []
         for i, img_name in enumerate(img_names):
             path = join(self.img_dir, img_name)
             try:
@@ -86,7 +91,7 @@ class DataGenerator(object):
             except:
                 print("GGWP for image: %s" % img_name)
                 continue
-            images[i] = img
+            images.append(img)
         
         return images
 
@@ -226,6 +231,11 @@ class CustomSequence(Sequence):
         np.random.shuffle(self.idxs)
         
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Testing DataGenerator')
+    parser.add_argument("dataset",
+                        help="The dataset to generate (train|val)")
+    args = parser.parse_args()
     config = Config()
-    data = DataGenerator(config)
+
+    data = DataGenerator(config, args.dataset)
     data.test()

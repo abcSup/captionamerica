@@ -1,7 +1,10 @@
 import argparse
+import json
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
 
 from keras.preprocessing import sequence
 from keras.applications.inception_v3 import preprocess_input
@@ -10,7 +13,7 @@ from configuration import Config
 from model import get_model
 from data_generator import DataGenerator
 
-def beamsearch(img_name, maxsample, k,
+def beamsearch(img, maxsample, k,
                use_unk=False, oov=3, empty=0, eos=2):
     """return k samples (beams) and their NLL scores, each sample is a sequence of labels,
     all samples starts with an `empty` label and end with `eos` or truncated to length of `maxsample`.
@@ -24,8 +27,6 @@ def beamsearch(img_name, maxsample, k,
     live_k = 1 # samples that did not yet reached eos
     live_samples = [[1]]
     live_scores = [0]
-
-    img = data._preprocess_imgs([img_name])
 
     count = 0
     while live_k and dead_k < k:
@@ -67,33 +68,56 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument("weight",
                         help="the weight file path")
+    parser.add_argument("--reference",
+                        help="output result according to reference file")
 
     args = parser.parse_args()
     config = Config()
-    config.batch_size = 1
-    config.num_batch = 1
 
     model = get_model(config)
     model.load_weights(args.weight)
-    data = DataGenerator(config)
 
-    while True:
-        img_name = data.random_imgname()
-        samples, scores = beamsearch(img_name, config.seq_len, config.beam_size)
+    data = DataGenerator(config, 'val')
 
-        print("Prediction, scores")
-        caps = data.seqs_to_caps(samples)
-        for i, cap in enumerate(caps):
-            print(cap)
-            print(scores[i])
+    if args.reference:
+        with open(args.reference, encoding='utf-8') as file:
+            ref = json.load(file)
 
-        print("Ground Truth")
-        ground = data.return_groundtruth(img_name)
-        ground = data.seqs_to_caps(ground)
-        for cap in ground:
-            print(cap)
+        img_names = []
+        for img in ref['images']:
+            if img['file_name'] not in img_names:
+                img_names.append(img['file_name'])
 
-        img = data.return_img(img_name)
-        plt.imshow(img)
-        plt.show()
+        output = []
+        for i in tqdm(img_names):
+            img = data._preprocess_imgs([i + '.jpg'])
+            seqs, scores = beamsearch(img, config.seq_len, config.beam_size)
+            seq = seqs[np.argmax(scores)]
+
+            x = {'image_id': i.rstrip('.jpg'), 'caption': data.seq_to_cap(seq)}
+            output.append(x)
+
+        json.dump(output, open('./data/result.json', 'w'),
+                  sort_keys=True, indent=2)
+    else:
+        img_names = data.img_names
+
+        while True:
+            img_name = random.choice(img_names)
+            img = data._preprocess_imgs([img_name])
+            seqs, scores = beamsearch(img, config.seq_len, config.beam_size)
+
+            print("Prediction, scores")
+            for i, seq in enumerate(seqs):
+                print(data.seq_to_cap(seq))
+                print(scores[i])
+
+            print("Ground Truth")
+            truth = data.return_groundtruth(img_name)
+            for seq in truth:
+                print(data.seq_to_cap(seq))
+
+            img = data.return_img(img_name)
+            plt.imshow(img)
+            plt.show()
 
