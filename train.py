@@ -9,7 +9,7 @@ from model import get_model
 from data_generator import DataGenerator
 from data_generator import CustomSequence
 
-num_train_epoch = 60
+num_train_epoch = 30
 num_finetune_epoch = 200
 #data_dir = './data'
 #h5file = join(data_dir, 'train_data.h5') 
@@ -42,7 +42,7 @@ model.fit_generator(data.generator(), config.num_batch,
 config.fine_tune = True
 model = get_model(config)
 
-checkpoint = ModelCheckpoint('./checkpoint/train_weight-{epoch:03d}.hdf5',
+checkpoint = ModelCheckpoint('./checkpoint/train_weight.hdf5',
 				monitor='loss',
 				mode='min',
 				save_best_only=True,
